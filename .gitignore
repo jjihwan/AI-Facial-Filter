@@ -1,1 +1,5 @@
 .DS_Store
+*.pth
+*.ckpt
+*.pyc
+__pycache__/
