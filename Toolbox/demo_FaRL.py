@@ -165,8 +165,6 @@ class Ex(QWidget, ui.Ui_Form):
                                               transforms.ToTensor(),
                                               ])
 
-        segmentator = FaRL(transform_image)
-
 
         image = transform_image(self.img)
         image = image[None]
