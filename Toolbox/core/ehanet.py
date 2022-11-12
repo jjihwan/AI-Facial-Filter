@@ -292,7 +292,7 @@ class ResNet(nn.Module):
 def EHANet18(num_classes=19, url=None, pretrained=True):
     # 测试组件作用
     model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes)
-    if pretrained:
+    '''if pretrained:
         # pretrained_dict = torch.load(url)
         pretrained_dict = load_url("https://download.pytorch.org/models/resnet18-5c106cde.pth")
         model_dict = model.state_dict().copy()
@@ -300,19 +300,23 @@ def EHANet18(num_classes=19, url=None, pretrained=True):
                                     v in pretrained_dict.items() if k in model_dict}
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
+        '''
+    if pretrained:
+        model.load_state_dict(torch.load("FaceParsing.pth"))
+    
     return model
 
-    # def EHANet34(num_classes=19, url=None, pretrained=True):
-    #     model = ResNet(BasicBlock, [3, 4, 6, 3], num_classes)
-    #     if pretrained:
-    #         pretrained_dict = load_url("https://download.pytorch.org/models/resnet34-333f7ec4.pth")
-    #         # pretrained_dict = torch.load(url)
-    #         model_dict = model.state_dict().copy()
-    #         pretrained_dict = {k: v for k,
-    #                                     v in pretrained_dict.items() if k in model_dict}
-    #         model_dict.update(pretrained_dict)
-    #         model.load_state_dict(model_dict)
-    #     return model
+def PreProcessing(tensor):
+    return F.interpolate(tensor, (512, 512), mode='bilinear', align_corners=True)
+
+def PostProcessing(result):
+    result_4 = torch.zeros((1, 4, 128, 128))
+    result = torch.argmax(result, dim=1)
+    result_4[0][0] = torch.where((result[0]==1), 1., 0.) + torch.where((result[0]==8), 1., 0.) + torch.where((result[0]==9), 1., 0.)
+    result_4[0][1] = torch.where((result[0]==4), 1., 0.) + torch.where((result[0]==5), 1., 0.) + torch.where((result[0]==6), 1., 0.) + torch.where((result[0]==7), 1., 0.)
+    result_4[0][2] = torch.where((result[0]==2), 1., 0.)
+    result_4[0][3] = torch.where((result[0]==10), 1., 0.) + torch.where((result[0]==11), 1., 0.) + torch.where((result[0]==12), 1., 0.)
+    return F.interpolate(result_4, size=(256,256))
 
 
 if __name__ == '__main__':
