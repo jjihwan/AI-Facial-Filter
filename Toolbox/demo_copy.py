@@ -119,26 +119,26 @@ class Ex(QWidget, ui.Ui_Form):
             image = QPixmap(fileName)
             mat_img = Image.open(fileName)
             # print(mat_img.size)
-            for filename in os.listdir(directory_mask):
-                if filename.split("_")[0] == tmp_filename:
-                    path = os.path.join(directory_mask, filename)
-                    mat_mask = cv2.imread(path, 0)
-                    mat_mask = cv2.resize(
-                        mat_mask, mat_img.size, interpolation=cv2.INTER_LINEAR)
-                    mat_mask = np.round(mat_mask/255)
-                    tmp_split = filename.split("_")[-1]
-                    tmp_split = tmp_split.split(".")[0]
+            # for filename in os.listdir(directory_mask):
+            #     if filename.split("_")[0] == tmp_filename:
+            #         path = os.path.join(directory_mask, filename)
+            #         mat_mask = cv2.imread(path, 0)
+            #         mat_mask = cv2.resize(
+            #             mat_mask, mat_img.size, interpolation=cv2.INTER_LINEAR)
+            #         mat_mask = np.round(mat_mask/255)
+            #         tmp_split = filename.split("_")[-1]
+            #         tmp_split = tmp_split.split(".")[0]
 
-                    if tmp_split == "skin":
-                        skin = mat_mask
-                        skin[skin != 0] = 1
-                        skin = skin.reshape(
-                            (mat_img.size[0], mat_img.size[1], 1))
-                else:
-                    continue
+            #         if tmp_split == "skin":
+            #             skin = mat_mask
+            #             skin[skin != 0] = 1
+            #             skin = skin.reshape(
+            #                 (mat_img.size[0], mat_img.size[1], 1))
+            #     else:
+            #         continue
 
-            mat_img = mat_img*skin.astype(np.uint8)
-            mat_img = Image.fromarray(mat_img)
+            # mat_img = mat_img*skin.astype(np.uint8)
+            # mat_img = Image.fromarray(mat_img)
             self.img = mat_img.copy()
             if image.isNull():
                 QMessageBox.information(
@@ -202,16 +202,16 @@ class Ex(QWidget, ui.Ui_Form):
         #         tmp_split = filename.split("_")[-1]
         #         tmp_split = tmp_split.split(".")[0]
 
-        #         if tmp_split == "brow" or tmp_split == "eye":
-        #             eye_mask = eye_mask + 1*mat_img
-        #             eye_mask[eye_mask != 0] = 1
-        #         elif tmp_split == "lip" or tmp_split == "mouth":
-        #             mouth_mask = mouth_mask + 2*mat_img
-        #             mouth_mask[mouth_mask != 0] = 2
-        #         elif tmp_split == "nose":
-        #             nose_mask = 3*mat_img
-        #             nose_mask[nose_mask != 0] = 3
-        #         elif tmp_split == "skin":
+        #         # if tmp_split == "brow" or tmp_split == "eye":
+        #         #     eye_mask = eye_mask + 1*mat_img
+        #         #     eye_mask[eye_mask != 0] = 1
+        #         # elif tmp_split == "lip" or tmp_split == "mouth":
+        #         #     mouth_mask = mouth_mask + 2*mat_img
+        #         #     mouth_mask[mouth_mask != 0] = 2
+        #         # elif tmp_split == "nose":
+        #         #     nose_mask = 3*mat_img
+        #         #     nose_mask[nose_mask != 0] = 3
+        #         if tmp_split == "skin":
         #             skin_mask = 4*mat_img
         #             skin_mask[skin_mask != 0] = 4
 

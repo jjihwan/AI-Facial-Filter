@@ -41,6 +41,7 @@ class BasicBlock(nn.Module):
 
         return out
 
+
 class _ChannelShrink(nn.Module):
     """Channel attention module"""
 
@@ -148,14 +149,16 @@ class _BoundaryAwareness(nn.Module):
         super(_BoundaryAwareness, self).__init__()
 
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_fea[0], in_fea[0], kernel_size=3, stride=1, padding=1, groups=in_fea[0], bias=False),
+            nn.Conv2d(in_fea[0], in_fea[0], kernel_size=3,
+                      stride=1, padding=1, groups=in_fea[0], bias=False),
             nn.BatchNorm2d(in_fea[0]),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_fea[0], mid_fea, 1, 1, 0, bias=False),
             nn.BatchNorm2d(mid_fea)
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(in_fea[1], in_fea[1], kernel_size=3, stride=1, padding=1, groups=in_fea[1], bias=False),
+            nn.Conv2d(in_fea[1], in_fea[1], kernel_size=3,
+                      stride=1, padding=1, groups=in_fea[1], bias=False),
             nn.BatchNorm2d(in_fea[1]),
             nn.ReLU(inplace=True),
             nn.Conv2d(in_fea[1], mid_fea, 1, 1, 0, bias=False),
@@ -231,7 +234,8 @@ class ResNet(nn.Module):
                           kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(planes * block.expansion))
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample=downsample))
+        layers.append(block(self.inplanes, planes,
+                      stride, downsample=downsample))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes))
@@ -302,21 +306,28 @@ def EHANet18(num_classes=19, url=None, pretrained=True):
         model.load_state_dict(model_dict)
         '''
     if pretrained:
-        model.load_state_dict(torch.load("FaceParsing.pth"))
-    
+        model.load_state_dict(torch.load(
+            "FaceParsing.pth", map_location=torch.device('cpu')))
+
     return model
+
 
 def PreProcessing(tensor):
     return F.interpolate(tensor, (512, 512), mode='bilinear', align_corners=True)
 
+
 def PostProcessing(result):
+    print(result)
     result_4 = torch.zeros((1, 4, 128, 128))
     result = torch.argmax(result, dim=1)
-    result_4[0][0] = torch.where((result[0]==1), 1., 0.) + torch.where((result[0]==8), 1., 0.) + torch.where((result[0]==9), 1., 0.)
-    result_4[0][1] = torch.where((result[0]==4), 1., 0.) + torch.where((result[0]==5), 1., 0.) + torch.where((result[0]==6), 1., 0.) + torch.where((result[0]==7), 1., 0.)
-    result_4[0][2] = torch.where((result[0]==2), 1., 0.)
-    result_4[0][3] = torch.where((result[0]==10), 1., 0.) + torch.where((result[0]==11), 1., 0.) + torch.where((result[0]==12), 1., 0.)
-    return F.interpolate(result_4, size=(256,256))
+    result_4[0][0] = torch.where((result[0] == 1), 1., 0.) + torch.where(
+        (result[0] == 8), 1., 0.) + torch.where((result[0] == 9), 1., 0.)
+    result_4[0][1] = torch.where((result[0] == 4), 1., 0.) + torch.where((result[0] == 5),
+                                                                         1., 0.) + torch.where((result[0] == 6), 1., 0.) + torch.where((result[0] == 7), 1., 0.)
+    result_4[0][2] = torch.where((result[0] == 2), 1., 0.)
+    result_4[0][3] = torch.where((result[0] == 10), 1., 0.) + torch.where(
+        (result[0] == 11), 1., 0.) + torch.where((result[0] == 12), 1., 0.)
+    return F.interpolate(result_4, size=(256, 256))
 
 
 if __name__ == '__main__':
