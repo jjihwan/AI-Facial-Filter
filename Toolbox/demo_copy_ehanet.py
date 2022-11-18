@@ -24,6 +24,7 @@ from core.model import Generator, MappingNetwork, StyleEncoder
 from core.unet import UNet
 from core.ehanet import *
 from core.checkpoint import CheckpointIO
+from core.affine import affine_img, affine_mask, warp_image, find_invH
 
 from ui import ui
 from ui.mouse_event import GraphicsScene
@@ -57,6 +58,9 @@ class Ex(QWidget, ui.Ui_Form):
         self.mask = None
         self.mask_m = None
         self.img = None
+        self.skin = None
+        self.tensor_image = None
+        self.invH = None
 
         self.mouse_clicked = False
         self.scene = QGraphicsScene()
@@ -119,27 +123,41 @@ class Ex(QWidget, ui.Ui_Form):
         if fileName:
             image = QPixmap(fileName)
             mat_img = Image.open(fileName)
-            # print(mat_img.size)
-            for filename in os.listdir(directory_mask):
-                if filename.split("_")[0] == tmp_filename:
-                    path = os.path.join(directory_mask, filename)
-                    mat_mask = cv2.imread(path, 0)
-                    mat_mask = cv2.resize(
-                        mat_mask, mat_img.size, interpolation=cv2.INTER_LINEAR)
-                    mat_mask = np.round(mat_mask/255)
-                    tmp_split = filename.split("_")[-1]
-                    tmp_split = tmp_split.split(".")[0]
+            mat_img = mat_img.resize((1024, 1024))
 
-                    if tmp_split == "skin":
-                        skin = mat_mask
-                        skin[skin != 0] = 1
-                        skin = skin.reshape(
-                            (mat_img.size[0], mat_img.size[1], 1))
-                else:
-                    continue
+            self.tensor_image = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(
+                transforms.ToTensor()(mat_img.resize((256, 256))))
+
+            transform_image = transforms.Compose([transforms.Resize([256, 256]),
+                                                  transforms.ToTensor(),
+                                                  transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                                       std=[0.229, 0.224, 0.225])
+                                                  ])
+            segmentator = EHANet18(num_classes=19, pretrained=True)
+            segmentator.eval()
+            image_t = transform_image(mat_img)
+            image_t = image_t[None]
+
+            mask_pred = PostProcessing(
+                segmentator(PreProcessing(image_t))[0][-1])
+            affined_img = affine_img(self.tensor_image, mask_pred)
+            # transforms.ToPILImage()(affined_img).show()
+            self.invH = find_invH(self.tensor_image, mask_pred)
+            skin = torch.sum(mask_pred[0, :], axis=0)
+            mask_image = transforms.ToPILImage()(skin)
+            mask_image = mask_image.resize((1024, 1024))
+            mask_image.save("mask.jpg")
+            self.skin = skin
+
+            skin = F.interpolate(torch.unsqueeze(torch.unsqueeze(
+                skin, 0), 0), size=mat_img.size, mode='bilinear')
+            skin = torch.squeeze(skin)
+            skin = torch.unsqueeze(skin, 2)
+            skin = skin.numpy()
 
             mat_img = mat_img*skin.astype(np.uint8)
             mat_img = Image.fromarray(mat_img)
+
             self.img = mat_img.copy()
             if image.isNull():
                 QMessageBox.information(
@@ -153,9 +171,9 @@ class Ex(QWidget, ui.Ui_Form):
             self.scene.addPixmap(image)
 
         self.mask_name = fileName
-        self.load_mask()
+        self.load_mask(mask_pred)
 
-    def load_mask(self):
+    def load_mask(self, mask_pred):
         # loading mask from real image
         skin_mask = np.zeros([256, 256])
         nose_mask = np.zeros([256, 256])
@@ -171,54 +189,33 @@ class Ex(QWidget, ui.Ui_Form):
         #segmentator = UNet(out_channels=4)
         segmentator = EHANet18(num_classes=19, pretrained=True)
 
-        #segmentator.load_state_dict(torch.load('core/FaceParsing.pth'))
+        # segmentator.load_state_dict(torch.load('core/FaceParsing.pth'))
         segmentator.eval()
 
         image = transform_image(self.img)
         image = image[None]
 
-        mask_pred = ehanet.PostProcessing(segmentator(ehanet.PreProcessing(image)))
+        mask_pred = PostProcessing(
+            segmentator(PreProcessing(image))[0][-1])
         #mask_pred = 1/(1+torch.exp(-mask_pred))
         #mask_pred = torch.round(mask_pred, decimals=0)
+        self.mask_pred = mask_pred
+        mask_pred = affine_mask(mask_pred)
 
-        e = mask_pred[0, 1]
-        m = mask_pred[0, 2]
-        n = mask_pred[0, 3]
+        s = mask_pred[0, 0]
+        e = mask_pred[0, 1] + mask_pred[0, 2]
+        m = mask_pred[0, 3]
+        n = mask_pred[0, 4]
 
         eye_mask = e
         mouth_mask = 2*m
         nose_mask = 3*n
-        # skin_mask = 4*s
+        skin_mask = 4*s
 
         tmp = self.mask_name.split("/")[-1]
         tmp_filename = tmp.split(".")[0].zfill(5)
 
         directory = os.path.join(QDir.currentPath(), "samples/masks")
-
-        # for filename in os.listdir(directory):
-        #     if filename.split("_")[0] == tmp_filename:
-        #         path = os.path.join(directory, filename)
-        #         mat_img = cv2.imread(path, 0)
-        #         mat_img = cv2.resize(mat_img, (256, 256))
-        #         mat_img = np.round(mat_img/255)
-        #         tmp_split = filename.split("_")[-1]
-        #         tmp_split = tmp_split.split(".")[0]
-
-        #         if tmp_split == "brow" or tmp_split == "eye":
-        #             eye_mask = eye_mask + 1*mat_img
-        #             eye_mask[eye_mask != 0] = 1
-        #         elif tmp_split == "lip" or tmp_split == "mouth":
-        #             mouth_mask = mouth_mask + 2*mat_img
-        #             mouth_mask[mouth_mask != 0] = 2
-        #         elif tmp_split == "nose":
-        #             nose_mask = 3*mat_img
-        #             nose_mask[nose_mask != 0] = 3
-        #         elif tmp_split == "skin":
-        #             skin_mask = 4*mat_img
-        #             skin_mask[skin_mask != 0] = 4
-
-        #     else:
-        #         continue
 
         # resikze mask
         eye_mask = torch.tensor(eye_mask)
@@ -332,7 +329,10 @@ class Ex(QWidget, ui.Ui_Form):
 
         mask = transform_mask(Image.fromarray(np.uint8(mask)))
         mask_m = transform_mask(Image.fromarray(np.uint8(mask_m)))
-        img = transform_image(img)
+        img = affine_img(transform_image(img), self.mask_pred)
+        #img = transform_image(img)
+
+        # transforms.ToPILImage()(img).show()
         ref = transform_image(ref)
 
         start_t = time.time()
@@ -343,9 +343,19 @@ class Ex(QWidget, ui.Ui_Form):
                  torch.FloatTensor([mask.numpy()]))
         generated = generator(torch.FloatTensor(
             [img.numpy()]), s_trg, masks=masks, attribute=self.attribute)
-
+        # print(mask.shape)
         end_t = time.time()
         print('inference time : {}'.format(end_t-start_t))
+        generated = torch.from_numpy(
+            warp_image(generated.detach().numpy().squeeze(), self.invH))
+        generated = generated * \
+            torch.unsqueeze(torch.unsqueeze(self.skin, 0),
+                            0) + self.tensor_image * torch.unsqueeze((1-self.skin), 0)
+        # generated = torch.unsqueeze(
+        #     self.tensor_image * torch.unsqueeze((1-self.skin), 0), 0)
+        # generated = torch.unsqueeze(self.tensor_image, 0)
+        # torch.unsqueeze(
+        #     torch.unsqueeze(torch.ones((256, 256))-self.skin, 0), 0)
         result = generated.permute(0, 2, 3, 1)
         result = result.detach().cpu().numpy()
         result = (result + 1) / 2
