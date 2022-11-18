@@ -318,14 +318,16 @@ def PreProcessing(tensor):
 
 def PostProcessing(result):
     print(result)
-    result_4 = torch.zeros((1, 4, 128, 128))
+    result_4 = torch.zeros((1, 5, 128, 128))
     result = torch.argmax(result, dim=1)
     result_4[0][0] = torch.where((result[0] == 1), 1., 0.) + torch.where(
         (result[0] == 8), 1., 0.) + torch.where((result[0] == 9), 1., 0.)
-    result_4[0][1] = torch.where((result[0] == 4), 1., 0.) + torch.where((result[0] == 5),
-                                                                         1., 0.) + torch.where((result[0] == 6), 1., 0.) + torch.where((result[0] == 7), 1., 0.)
-    result_4[0][2] = torch.where((result[0] == 2), 1., 0.)
-    result_4[0][3] = torch.where((result[0] == 10), 1., 0.) + torch.where(
+    result_4[0][1] = torch.where((result[0] == 4), 1., 0.) + torch.where((result[0] == 6),
+                                                                         1., 0.)
+    result_4[0][2] = torch.where((result[0] == 5), 1., 0.) + torch.where((result[0] == 7),
+                                                                         1., 0.)
+    result_4[0][3] = torch.where((result[0] == 2), 1., 0.)
+    result_4[0][4] = torch.where((result[0] == 10), 1., 0.) + torch.where(
         (result[0] == 11), 1., 0.) + torch.where((result[0] == 12), 1., 0.)
     return F.interpolate(result_4, size=(256, 256))
 
