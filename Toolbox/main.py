@@ -5,6 +5,7 @@ import time
 import numpy as np
 import PIL
 from PIL import Image
+from PIL.ImageQt import ImageQt
 import math
 
 import torch
@@ -26,7 +27,7 @@ from core.unet import UNet
 from core.FaRL_faceparser import FaRL_256, FaRL_1024
 from core.checkpoint import CheckpointIO
 from core.affine import affine_img, affine_mask, warp_image, find_invH
-
+from core.affine_1024 import affine_img_1024
 from ui import ui
 from ui.mouse_event import GraphicsScene
 
@@ -89,7 +90,39 @@ class Ex(QWidget, ui.Ui_Form):
         self.invH = None
         self.mask_pred_256 = None
         self.mask_pred_1024 = None
-        self.alpha = 0.3
+        self.alpha = 0.7
+        self.ref = None
+        self.star = None  # selecting style. 0 - IU, 1 - JWY, 2 - NY
+        self.star_style = torch.cat((torch.cat((torch.tensor([[-6.2113e-01,  2.0517e+00,  2.4000e-01, -2.6255e-01,  2.4179e-01,
+                                               -2.8793e+00,  1.5588e+00, -9.0695e-01, -1.2933e+00,  2.9646e+00,
+                                               5.5971e-01, -1.2251e+00, -9.0674e-01,  1.8832e+00,  1.6605e+00,
+                                               -8.7556e-01,  2.5428e+00,  9.0850e-01,  1.2170e-01,  1.6328e-01,
+                                               3.7637e+00, -5.3771e-01, -6.2790e-01, -2.0342e+00,  1.3229e+00,
+                                               -1.0477e+00, -4.7527e-02, -3.4922e+00, -4.0181e-01,  1.3703e+00,
+                                               8.1669e-01,  1.8076e+00,  5.7517e-01, -1.4479e-01, -1.8549e+00,
+                                               -1.2505e+00, -1.8515e-02,  4.7660e-01, -4.1602e-01,  7.8310e-01,
+                                               1.1340e+00, -1.4290e+00, -1.5522e+00,  2.3367e+00,  3.5454e-03,
+                                               -9.5534e-01,  1.6768e+00,  2.0681e+00,  1.2742e+00, -3.8776e-01,
+                                               3.7261e-01, -3.5170e-01,  7.0199e-01,  3.0009e+00,  2.4033e-02,
+                                               -9.8368e-01, -1.6568e+00, -1.7119e+00, -8.1332e-01,  1.0358e-01,
+                                               1.4604e+00,  2.3371e-01,  1.2524e+00, -2.9008e+00]]),
+                                     torch.tensor([[-0.6654,  1.9051,  0.5576, -0.1215,  0.5871, -2.9469,  1.4394, -1.1295,
+                                                   -1.5324,  3.3035,  0.2253, -1.1955, -1.0215,  2.0417,  1.5647, -0.8674,
+                                                   2.4636,  0.5203,  0.2079,  0.1077,  3.8872, -0.7178, -0.3891, -2.3430,
+                                                   1.7837, -0.9503, -0.3683, -3.8540, -0.3708,  1.6032,  0.9604,  2.0024,
+                                                   0.5748, -0.0219, -2.1755, -1.2537,  0.1267,  0.4426, -0.6324,  0.8908,
+                                                   1.0365, -1.9384, -1.3756,  2.7352,  0.2581, -1.2037,  1.8737,  1.8325,
+                                                   1.2466, -0.2322,  0.5378, -0.1024,  0.4774,  2.9384, -0.1355, -0.5301,
+                                                   -1.5025, -1.5791, -0.5855, -0.0762,  1.5727, -0.0438,  1.5195, -2.8828]])
+                                                ), axis=0),
+                                     torch.tensor([[-0.7206,  1.8766,  0.7194, -0.3504,  0.3427, -2.1000,  2.2526, -1.4914,
+                                                    -1.6249,  2.3412,  0.8200, -1.0424, -0.8252,  1.7793,  2.6782,  0.0878,
+                                                    2.1406,  1.0943,  0.1039,  0.6568,  3.1117,  0.1684, -1.0511, -0.9694,
+                                                    1.3676, -0.2686,  0.0504, -2.3933, -0.3545,  1.2875,  0.6429,  1.8204,
+                                                    -0.1296,  0.1761, -1.5760, -0.8816, -0.1128,  0.2682,  0.0153,  0.9614,
+                                                    1.6165, -0.8339, -1.9320,  1.3848, -1.1752, -1.2134,  0.9706,  1.5553,
+                                                    1.0308,  0.2278, -0.2469, -0.5066,  0.7989,  2.6576,  0.4700, -0.2395,
+                                                    -1.4192, -2.1337, -0.2350,  0.4855,  1.1469,  0.4624,  1.2890, -1.6510]])), axis=0)
 
         self.src = None
         self.src_blend = None
@@ -97,29 +130,51 @@ class Ex(QWidget, ui.Ui_Form):
         self.blended = None
 
         self.mouse_clicked = False
+
         self.scene = QGraphicsScene()
         self.graphicsView_1.setScene(self.scene)
         self.graphicsView_1.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.graphicsView_1.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.graphicsView_1.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.mask_scene = GraphicsScene(self.mode, self.size)
-        self.graphicsView_2.setScene(self.mask_scene)
+        self.affimg_scene = QGraphicsScene()
+        self.graphicsView_2.setScene(self.affimg_scene)
         self.graphicsView_2.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.graphicsView_2.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.graphicsView_2.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.ref_scene = QGraphicsScene()
-        self.graphicsView_3.setScene(self.ref_scene)
+        self.affmask_scene = GraphicsScene(self.mode, self.size)
+        self.graphicsView_3.setScene(self.affmask_scene)
         self.graphicsView_3.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.graphicsView_3.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.graphicsView_3.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self.result_scene = QGraphicsScene()
-        self.graphicsView_4.setScene(self.result_scene)
+        self.ref_scene = QGraphicsScene()
+        self.graphicsView_4.setScene(self.ref_scene)
         self.graphicsView_4.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.graphicsView_4.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.graphicsView_4.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # gout_scene / self.mode, self.size delete needed / Graph~ to QGraph
+        self.gout_scene = QGraphicsScene()
+        self.graphicsView_5.setScene(self.gout_scene)
+        self.graphicsView_5.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.graphicsView_5.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphicsView_5.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.blended_scene = QGraphicsScene()
+        self.graphicsView_6.setScene(self.blended_scene)
+        self.graphicsView_6.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.graphicsView_6.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphicsView_6.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # final_scene
+        self.result_scene = QGraphicsScene()
+        self.graphicsView_7.setScene(self.result_scene)
+        self.graphicsView_7.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.graphicsView_7.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.graphicsView_7.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.color = None
 
         self.pushButton_3.setEnabled(False)
@@ -128,23 +183,42 @@ class Ex(QWidget, ui.Ui_Form):
         self.pushButton_6.setEnabled(False)
         self.pushButton_7.setEnabled(False)
         self.pushButton_8.setEnabled(False)
-        self.pushButton_9.setEnabled(False)
-        self.pushButton_10.setEnabled(False)
-        self.pushButton_11.setEnabled(False)
-        self.slidern_1.setEnabled(False)
-        self.slidern_2.setEnabled(False)
-        self.slidern_3.setEnabled(False)
 
-        #self.mask_scene.size = 6
+        self.slidern_1.setEnabled(False)
+
+        pixmap1 = QPixmap('./iu.jpg')
+        pixmap1 = pixmap1.scaled(120, 120, Qt.IgnoreAspectRatio)
+        icon1 = QIcon()
+        icon1.addPixmap(pixmap1)
+        self.pushButton_6.setIcon(icon1)
+        self.pushButton_6.setIconSize(QSize(120, 120))
+
+        pixmap2 = QPixmap('./jang.jpg')
+        pixmap2 = pixmap2.scaled(120, 120, Qt.IgnoreAspectRatio)
+        icon2 = QIcon()
+        icon2.addPixmap(pixmap2)
+        self.pushButton_7.setIcon(icon2)
+        self.pushButton_7.setIconSize(QSize(120, 120))
+
+        pixmap3 = QPixmap('./nayeon.jpg')
+        pixmap3 = pixmap3.scaled(120, 120, Qt.IgnoreAspectRatio)
+        icon3 = QIcon()
+        icon3.addPixmap(pixmap3)
+        self.pushButton_8.setIcon(icon3)
+        self.pushButton_8.setIconSize(QSize(120, 120))
 
     def slider(self, value):
-        # mapping
-        mask_size = 0.85 + 0.003*value
-        self.mask_size[self.tmp_attribute] = mask_size
-        self.load_mask()
+        self.alpha = value/100.
 
     def open(self):
         self.load = True
+
+        # celeb reference button activated
+        self.pushButton_6.setEnabled(True)
+        self.pushButton_7.setEnabled(True)
+        self.pushButton_8.setEnabled(True)
+        self.slidern_1.setEnabled(True)
+
         # loading real image
         directory = os.path.join(QDir.currentPath(), "samples/faces")
         directory_mask = os.path.join(QDir.currentPath(), "samples/masks")
@@ -156,22 +230,22 @@ class Ex(QWidget, ui.Ui_Form):
 
         if fileName:
             image = QPixmap(fileName)
-            mat_img = Image.open(fileName)
-            mat_img = mat_img.resize((1024, 1024))
+            mat_pil_img = Image.open(fileName)
+            mat_img = mat_pil_img.resize((1024, 1024))
 
             self.tensor_image_256 = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(
                 transforms.ToTensor()(mat_img.resize((256, 256))))
             self.tensor_image_1024 = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(
                 transforms.ToTensor()(mat_img))
-            self.src_blend = transforms.ToPILImage()((self.tensor_image_1024+1)/2)
+
+            self.src_blend = mat_img
 
             mask_pred_1024 = FaRL_1024(mat_img)
-            mask_pred_256 = FaRL_256(mat_img)
+            mask_pred_256 = F.interpolate(
+                mask_pred_1024, (256, 256), mode='nearest')
 
             self.mask_pred_1024 = mask_pred_1024
             self.mask_pred_256 = mask_pred_256
-            affined_img = affine_img(self.tensor_image_256, mask_pred_256)
-            transforms.ToPILImage()(affined_img).show()
             self.invH = find_invH(self.tensor_image_256, mask_pred_256)
             skin = torch.sum(mask_pred_1024[0, :], axis=0)
 
@@ -189,6 +263,19 @@ class Ex(QWidget, ui.Ui_Form):
             mat_img = Image.fromarray(mat_img)
 
             self.img = mat_img.copy()
+
+            affine_s = affine_img(transforms.ToTensor()(
+                mat_img.resize((256, 256))), mask_pred_256).unsqueeze(0)
+
+            result = affine_s.permute(0, 2, 3, 1)
+            result = result.detach().cpu().numpy()
+            result = result.clip(0, 1)
+            result = result * 255
+
+            result = np.asarray(result[0, :, :, :], dtype=np.uint8)
+            result = result.copy()
+            qim = QImage(result.data, 256, 256, QImage.Format_RGB888)
+
             if image.isNull():
                 QMessageBox.information(
                     self, "Image Viewer", "Cannot load %s." % fileName)
@@ -198,19 +285,24 @@ class Ex(QWidget, ui.Ui_Form):
 
             if len(self.scene.items()) > 0:
                 self.scene.removeItem(self.scene.items()[-1])
-            self.scene.addPixmap(image)
+            self.scene.addPixmap(image)\
+
+            if len(self.affimg_scene.items()) > 0:
+                self.affimg_scene.removeItem(self.affimg_scene.items()[-1])
+            self.affimg_scene.addPixmap(QPixmap.fromImage(qim))
 
         self.mask_name = fileName
-        self.load_mask(mask_pred_256)
+        self.load_mask()
 
-    def load_mask(self, mask_pred):
+    def load_mask(self):
         # loading mask from real image
         skin_mask = np.zeros([256, 256])
         nose_mask = np.zeros([256, 256])
         eye_mask = np.zeros([256, 256])
         mouth_mask = np.zeros([256, 256])
 
-        mask_pred = affine_mask(mask_pred)
+        # affine mask
+        mask_pred = affine_mask(self.mask_pred_256)
 
         s = mask_pred[0, 0]
         e = mask_pred[0, 1] + mask_pred[0, 2]
@@ -227,8 +319,8 @@ class Ex(QWidget, ui.Ui_Form):
 
         directory = os.path.join(QDir.currentPath(), "samples/masks")
 
-        # resikze mask
-        eye_mask = torch.tensor(eye_mask)
+        # resize mask
+        eye_mask = eye_mask.clone().detach()
         size_tmp = int(self.mask_size[0] * eye_mask.size(0))
         mask_tmp = F.interpolate(torch.unsqueeze(torch.unsqueeze(
             eye_mask, 0), 0), size=size_tmp, mode='bilinear')
@@ -237,7 +329,7 @@ class Ex(QWidget, ui.Ui_Form):
         eye_mask = eye_mask.numpy()
         eye_mask[eye_mask != 0] = 1
 
-        mouth_mask = torch.tensor(mouth_mask)
+        mouth_mask = mouth_mask.clone().detach()
         size_tmp = int(self.mask_size[1] * mouth_mask.size(0))
         mask_tmp = F.interpolate(torch.unsqueeze(torch.unsqueeze(
             mouth_mask, 0), 0), size=size_tmp, mode='bilinear')
@@ -246,7 +338,7 @@ class Ex(QWidget, ui.Ui_Form):
         mouth_mask = mouth_mask.numpy()
         mouth_mask[mouth_mask != 0] = 2
 
-        nose_mask = torch.tensor(nose_mask)
+        nose_mask = nose_mask.clone().detach()
         size_tmp = int(self.mask_size[2] * nose_mask.size(0))
         mask_tmp = F.interpolate(torch.unsqueeze(torch.unsqueeze(
             nose_mask, 0), 0), size=size_tmp, mode='bilinear')
@@ -279,21 +371,19 @@ class Ex(QWidget, ui.Ui_Form):
         pixmap = QPixmap()
         pixmap.convertFromImage(image)
         self.image = pixmap.scaled(
-            self.graphicsView_1.size(), Qt.IgnoreAspectRatio)
-        self.mask_scene.reset()
-        if len(self.mask_scene.items()) > 0:
-            self.mask_scene.reset_items()
-        self.mask_scene.addPixmap(self.image)
+            self.graphicsView_3.size(), Qt.IgnoreAspectRatio)
+        self.affmask_scene.reset()
+        if len(self.affmask_scene.items()) > 0:
+            self.affmask_scene.reset_items()
+        self.affmask_scene.addPixmap(self.image)
 
     def open_ref(self):
+        self.star = None
         if self.load == True:
             self.pushButton_4.setEnabled(True)
             self.pushButton_5.setEnabled(True)
             self.pushButton_7.setEnabled(True)
             self.pushButton_8.setEnabled(True)
-            self.pushButton_9.setEnabled(True)
-            self.pushButton_10.setEnabled(True)
-            self.pushButton_11.setEnabled(True)
 
         # loading random reference image for style
         directory = os.path.join(QDir.currentPath(), "samples/faces")
@@ -319,55 +409,59 @@ class Ex(QWidget, ui.Ui_Form):
         # updates the changes of the mask
         for i in range(5):
             self.mask_m = self.make_mask(
-                self.mask_m, self.mask_scene.mask_points[i], self.mask_scene.size_points[i], i)
+                self.mask_m, self.affmask_scene.mask_points[i], self.affmask_scene.size_points[i], i)
 
         transform_mask = transforms.Compose([transforms.Resize([256, 256]),
                                              transforms.ToTensor(),
                                              transforms.Normalize(
-                                                 (0, 0, 0), (1 / 255., 1 / 255., 1 / 255.))
-                                             ])
+            (0, 0, 0), (1 / 255., 1 / 255., 1 / 255.))
+        ])
 
         transform_image = transforms.Compose([transforms.Resize([256, 256]),
                                               transforms.ToTensor(),
                                               transforms.Normalize(
-                                                  (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                                              ])
+            (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
         mask = self.mask.copy()
         mask_m = self.mask_m.copy()
         img = self.img.copy()
-        ref = self.ref.copy()
 
         mask = transform_mask(Image.fromarray(np.uint8(mask)))
         mask_m = transform_mask(Image.fromarray(np.uint8(mask_m)))
         img = affine_img(transform_image(img), self.mask_pred_256)
-        #img = transform_image(img)
-
-        # transforms.ToPILImage()(img).show()
-        ref = transform_image(ref)
 
         start_t = time.time()
 
-        s_trg = self.alpha * style_encoder(torch.FloatTensor(
-            [ref.numpy()]), torch.LongTensor([self.y_trg])) + (1-self.alpha) * style_encoder(torch.FloatTensor(
-                [img.numpy()]), torch.LongTensor([self.y_trg]))
+        # mix the styles
+        if self.star is None:
+            ref = transform_image(self.ref.copy())
+            ref_style = style_encoder(torch.FloatTensor(
+                [ref.numpy()]), torch.LongTensor([self.y_trg]))
+        else:
+            ref_style = self.star_style[self.star, :]
+        s_style = style_encoder(torch.FloatTensor(
+            [img.numpy()]), torch.LongTensor([self.y_trg]))
+        s_trg = self.alpha * ref_style + (1-self.alpha) * s_style
 
-        # s_trg = style_encoder(torch.FloatTensor(
-        #     [ref.numpy()]), torch.LongTensor([self.y_trg]))
+        # generating
         masks = (torch.FloatTensor([mask_m.numpy()]),
                  torch.FloatTensor([mask.numpy()]))
         generated = generator(torch.FloatTensor(
             [img.numpy()]), s_trg, masks=masks, attribute=self.attribute)
-        # print(mask.shape)
         end_t = time.time()
         print('inference time : {}'.format(end_t-start_t))
-        generated = torch.from_numpy(
+
+        # blending
+        generated_blend = torch.from_numpy(
             warp_image(generated.detach().numpy().squeeze(), self.invH))
 
-        generated = F.interpolate(generated.unsqueeze(0), (1024, 1024), mode='bilinear') * \
+        generated_blend = F.interpolate(generated_blend.unsqueeze(0), (1024, 1024), mode='bilinear') * \
             torch.unsqueeze(torch.unsqueeze(self.skin, 0),
                             0) + self.tensor_image_1024 * torch.unsqueeze((1-self.skin), 0)
 
-        self.blended = transforms.ToPILImage()(torch.squeeze((generated+1)/2, 0))
+        # optimizing
+        self.blended = transforms.ToPILImage()(
+            torch.squeeze(((generated_blend+1)/2).clip(0, 1), 0))
 
         self.src_blend.save("src.jpg")
         self.mask_blend.save("mask.jpg")
@@ -380,6 +474,7 @@ class Ex(QWidget, ui.Ui_Form):
         opt_im = blend_optimize(src_blend, blended, mask_blend, 128, color_weight=1,
                                 gradient_kernel='normal', n_iteration=1, whole_grad=True, origin_res=True)
 
+        # generated output
         result = generated.permute(0, 2, 3, 1)
         result = result.detach().cpu().numpy()
         result = (result + 1) / 2
@@ -389,17 +484,33 @@ class Ex(QWidget, ui.Ui_Form):
         result = np.asarray(result[0, :, :, :], dtype=np.uint8)
         result = result.copy()
 
+        # blended output
+        result_blend = generated_blend.permute(0, 2, 3, 1)
+        result_blend = result_blend.detach().cpu().numpy()
+        result_blend = (result_blend + 1) / 2
+        result_blend = result_blend.clip(0, 1)
+        result_blend = result_blend * 255
+
+        result_blend = np.asarray(result_blend[0, :, :, :], dtype=np.uint8)
+        result_blend = result_blend.copy()
+
+        # optimized output
         self.output_img = opt_im
 
-        qim = QImage(opt_im, 1024, 1024, QImage.Format_RGB888)
+        qim = QImage(opt_im, 1024, 1024, QImage.Format_RGB888).scaled(384, 384)
+        qim1 = QImage(result.data, 256, 256, QImage.Format_RGB888)
+        qim2 = QImage(result_blend.data, 1024, 1024,
+                      QImage.Format_RGB888).scaled(256, 256)
 
-        # self.output_img = result
-
-        # qim = QImage(result.data, 1024, 1024, QImage.Format_RGB888)
-        qim = qim.scaled(256, 256)
         if len(self.result_scene.items()) > 0:
             self.result_scene.removeItem(self.result_scene.items()[-1])
         self.result_scene.addPixmap(QPixmap.fromImage(qim))
+        if len(self.gout_scene.items()) > 0:
+            self.gout_scene.removeItem(self.gout_scene.items()[-1])
+        self.gout_scene.addPixmap(QPixmap.fromImage(qim1))
+        if len(self.blended_scene.items()) > 0:
+            self.blended_scene.removeItem(self.blended_scene.items()[-1])
+        self.blended_scene.addPixmap(QPixmap.fromImage(qim2))
 
     def make_mask(self, mask, pts, sizes, color):
         if len(pts) > 0:
@@ -418,57 +529,50 @@ class Ex(QWidget, ui.Ui_Form):
             except:
                 pass
 
+    def celeb1(self):
+        self.pushButton_4.setEnabled(True)
+        self.pushButton_5.setEnabled(True)
+
+        self.star = 0
+
+        celebimg1 = QPixmap('./iu.jpg')
+        celebimg1 = celebimg1.scaled(384, 384, Qt.IgnoreAspectRatio)
+        self.ref_scene.addPixmap(celebimg1)
+        print("IU")
+        return 0
+
+    def celeb2(self):
+        self.pushButton_4.setEnabled(True)
+        self.pushButton_5.setEnabled(True)
+
+        self.star = 1
+
+        celebimg2 = QPixmap('./jang.jpg')
+        celebimg2 = celebimg2.scaled(384, 384, Qt.IgnoreAspectRatio)
+        self.ref_scene.addPixmap(celebimg2)
+        print("Jang Won Young")
+        return 0
+
+    def celeb3(self):
+        self.pushButton_4.setEnabled(True)
+        self.pushButton_5.setEnabled(True)
+
+        self.star = 2
+
+        celebimg3 = QPixmap('./nayeon.jpg')
+        celebimg3 = celebimg3.scaled(384, 384, Qt.IgnoreAspectRatio)
+        self.ref_scene.addPixmap(celebimg3)
+        print("Jeny")
+        return 0
+
     def clear(self):
         self.pushButton_6.setEnabled(False)
-        self.slidern_1.setEnabled(False)
+        self.slidern_1.setEnabled(True)
         self.slidern_1.setValue(49)
-        self.slidern_2.setEnabled(False)
-        self.slidern_2.setValue(49)
-        self.slidern_3.setEnabled(False)
-        self.slidern_3.setValue(49)
         self.attribute = []
         self.mask_size = [1.0, 1.0, 1.0]
         self.tmp_attribute = None
         self.load_mask()
-
-    def man_mode(self):
-        self.y_trg = 1
-
-    def woman_mode(self):
-        self.y_trg = 0
-
-    def eyes_mode(self):
-        self.slidern_1.setEnabled(False)
-        self.slidern_2.setEnabled(True)
-        self.slidern_3.setEnabled(False)
-        self.pushButton_6.setEnabled(True)
-        self.mask_scene.mode = 1
-        self.tmp_attribute = 0
-        if (0 in self.attribute) == False:
-            self.attribute.append(0)
-
-    def mouth_mode(self):
-        self.slidern_1.setEnabled(False)
-        self.slidern_2.setEnabled(False)
-        self.slidern_3.setEnabled(True)
-        self.pushButton_6.setEnabled(True)
-        self.mask_scene.mode = 2
-        self.tmp_attribute = 1
-        if (1 in self.attribute) == False:
-            self.attribute.append(1)
-
-    def nose_mode(self):
-        self.slidern_1.setEnabled(True)
-        self.slidern_2.setEnabled(False)
-        self.slidern_3.setEnabled(False)
-        self.pushButton_6.setEnabled(True)
-        self.mask_scene.mode = 3
-        self.tmp_attribute = 2
-        if (2 in self.attribute) == False:
-            self.attribute.append(2)
-
-    def skin_mode(self):
-        self.mask_scene.mode = 4
 
 
 def _load_checkpoint(nets_ema, checkpoint_dir, step):
@@ -482,12 +586,8 @@ def blend_optimize(src, blended, mask, image_size=256, color_weight=1, gradient_
                    n_iteration=2, whole_grad=False, origin_res=False):
 
     h_orig, w_orig, _ = src.shape
-    print("Blended Shape", blended.shape)
     blended = resize(blended, (h_orig, w_orig))
     mask = resize(mask, (h_orig, w_orig))
-    print("Source Shape", src.shape)
-    print("Blended Shape", blended.shape)
-    print("Mask Shape", mask.shape)
 
     ############################ Image Gaussian Poisson Editing #############################
     if n_iteration > 1:  # in case for iterative optimization

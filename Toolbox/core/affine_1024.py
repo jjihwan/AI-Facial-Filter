@@ -132,7 +132,7 @@ def set_cor(mask):
     return origin, affined
 
 
-def affine_img(img, mask):
+def affine_img_1024(img, mask):
     """_summary_
 
     Args:

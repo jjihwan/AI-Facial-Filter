@@ -57,7 +57,6 @@ def compute_h_norm(p1, p2):
 
 def warp_image(origin, H):
     # TODO ...
-    print(origin.shape)
     _, X, Y = origin.shape
     affined = np.zeros((3, X, Y))
 
@@ -75,7 +74,6 @@ def warp_image(origin, H):
 
 def warp_mask(origin, H):
     # TODO ...
-    print(origin.shape)
     _, _, X, Y = origin.shape
     affined = np.zeros((1, 5, X, Y))
 
@@ -117,7 +115,6 @@ def set_cor(mask):
     ny = np.mean(nose_ycor[nose_ycor > 0])
 
     origin = np.array([[lex, ley], [rex, rey], [lx, ly], [nx, ny]])
-    print(origin)
     # left_eye, right_eye, lips, nose
     affined = np.array([[110, 90], [110, 165], [197, 128], [143, 128]])
     return origin, affined
