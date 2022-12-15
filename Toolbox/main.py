@@ -258,7 +258,7 @@ class Ex(QWidget, ui.Ui_Form):
             skin = torch.squeeze(skin)
             skin = torch.unsqueeze(skin, 2)
             skin = skin.numpy()
-
+            ###############
             mat_img = mat_img*skin.astype(np.uint8)
             mat_img = Image.fromarray(mat_img)
 

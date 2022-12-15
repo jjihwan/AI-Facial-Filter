@@ -57,6 +57,7 @@ def compute_h_norm(p1, p2):
 
 def warp_image(origin, H):
     # TODO ...
+    print(origin.shape)
     _, X, Y = origin.shape
     affined = np.zeros((3, X, Y))
 
@@ -74,6 +75,7 @@ def warp_image(origin, H):
 
 def warp_mask(origin, H):
     # TODO ...
+    print(origin.shape)
     _, _, X, Y = origin.shape
     affined = np.zeros((1, 5, X, Y))
 
@@ -90,20 +92,29 @@ def warp_mask(origin, H):
 
 
 def set_cor(mask):
+    """_summary_
+
+    Args:
+        mask (Tensor): mask 1024*1024
+
+    Returns:
+        _type_: _description_
+    """
     mask = mask.numpy()
+    n = mask.shape[0]
     l_eye = mask[0, 2]
     r_eye = mask[0, 1]
     lips = mask[0, 4]
     nose = mask[0, 3]
 
-    l_eye_xcor = np.arange(256).reshape((-1, 1)) * l_eye
-    l_eye_ycor = np.arange(256).reshape((1, -1)) * l_eye
-    r_eye_xcor = np.arange(256).reshape((-1, 1)) * r_eye
-    r_eye_ycor = np.arange(256).reshape((1, -1)) * r_eye
-    lips_xcor = np.arange(256).reshape((-1, 1)) * lips
-    lips_ycor = np.arange(256).reshape((1, -1)) * lips
-    nose_xcor = np.arange(256).reshape((-1, 1)) * nose
-    nose_ycor = np.arange(256).reshape((1, -1)) * nose
+    l_eye_xcor = np.arange(1024).reshape((-1, 1)) * l_eye
+    l_eye_ycor = np.arange(1024).reshape((1, -1)) * l_eye
+    r_eye_xcor = np.arange(1024).reshape((-1, 1)) * r_eye
+    r_eye_ycor = np.arange(1024).reshape((1, -1)) * r_eye
+    lips_xcor = np.arange(1024).reshape((-1, 1)) * lips
+    lips_ycor = np.arange(1024).reshape((1, -1)) * lips
+    nose_xcor = np.arange(1024).reshape((-1, 1)) * nose
+    nose_ycor = np.arange(1024).reshape((1, -1)) * nose
 
     lex = np.mean(l_eye_xcor[l_eye_xcor > 0])
     ley = np.mean(l_eye_ycor[l_eye_ycor > 0])
@@ -115,25 +126,31 @@ def set_cor(mask):
     ny = np.mean(nose_ycor[nose_ycor > 0])
 
     origin = np.array([[lex, ley], [rex, rey], [lx, ly], [nx, ny]])
+    print(origin)
     # left_eye, right_eye, lips, nose
-    affined = np.array([[110, 90], [110, 165], [197, 128], [143, 128]])
+    affined = 4*np.array([[110, 90], [110, 165], [197, 128], [143, 128]])
     return origin, affined
 
 
-def affine_img(img, mask):
+def affine_img_1024(img, mask):
+    """_summary_
 
-    origin_img = img.numpy()
+    Args:
+        img (Tensor): 1024*1024
+        mask (Tensor): 1024*1024
+
+    Returns:
+        affined_image(numpy): 1024*1024
+    """
+
+    origin_img = img  # .numpy()
     original_cor, affined_cor = set_cor(mask=mask)
 
     H = compute_h_norm(p1=affined_cor, p2=original_cor)
 
     affined_img = warp_image(origin=origin_img, H=H)
-    ############
-    # pil_img = affined_img.transpose((1, 2, 0))
-    # pil_img = Image.fromarray((256*pil_img).astype(np.uint8))
-    # pil_img.save('affined_img.jpg')
-    ############
-    return torch.from_numpy(affined_img)
+
+    return affined_img  # torch.from_numpy(affined_img)
 
 
 def find_invH(img, mask):
@@ -153,3 +170,11 @@ def affine_mask(mask):
     affined_mask = warp_mask(origin=origin_mask, H=H)
 
     return torch.from_numpy(affined_mask)
+
+
+if __name__ == '__main__':
+    fileName = 'iu.jpg'
+    mat_pil_img = Image.open(fileName)
+    mat_img = mat_pil_img.resize((1024, 1024))
+    affined_img = affine_img_1024(mat_img)
+    Image.write('./affined_img.jpg')
