@@ -4,3 +4,10 @@
 
 ### cd ./Toolbox
 ### python3 main.py
+
+## 출처
+# FacialGAN
+https://github.com/cc-hpc-itwm/FacialGAN.git
+
+# Others
+
