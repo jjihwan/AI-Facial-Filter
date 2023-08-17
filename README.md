@@ -1,4 +1,6 @@
-# SNU_DLproject_2022
+# AI facial filter
+
+<img width="1909" alt="image" src="https://github.com/Jjihwan/SNU_DLproject_2022/assets/63445348/9b70782c-bad0-45b2-ac7e-f5ce18d4ffe3">
 
 ## 코드 구현 방법
 
